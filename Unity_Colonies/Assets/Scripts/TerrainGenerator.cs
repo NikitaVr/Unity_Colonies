@@ -10,7 +10,7 @@ public class TerrainGenerator : MonoBehaviour
     public Sprite sprite;
     public Sprite sprite2;
     public Sprite sprite3;
-    public List<List<int>> blocks;
+    public int[,] blocks;
     //public List<List<List<List<GameObject>>>> superBlocks;
     public GameObject[,,,] superBlocks;
     private List<int> column;
@@ -28,6 +28,8 @@ public class TerrainGenerator : MonoBehaviour
     public int playerSuperY;
     public int lastPlayerSuperX;
     public int lastPlayerSuperY;
+    private int stone;
+    private int dirt;
 
 
 
@@ -83,7 +85,7 @@ public class TerrainGenerator : MonoBehaviour
         //chunks = new byte[10, 10];
 
         //blocks = new byte[xblocks, yblocks];
-        blocks = new List<List<int>>();
+        blocks = new int[xblocks,yblocks];
 
 
 
@@ -91,16 +93,47 @@ public class TerrainGenerator : MonoBehaviour
 
         for (int px = 0; px < xblocks; px++)
         {
+            int stone = Noise(px, 0, 80, 15, 1);
+            stone += Noise(px,0,50,30,1);
+            stone += Noise(px,0,10,10,1);
+            stone += 150;
 
-            column = new List<int>();
-            blocks.Add(column);
+            int dirt = Noise(px, 0, 100f, 35, 1);
+            dirt += Noise(px,100,50,30,1);
+            dirt += 150;
+            //column = new List<int>();
+            //blocks.Add(column);
             for (int py = 0; py < yblocks; py++)
             {
 
+                if (py < stone)
+                {
+                    blocks[px, py] = 1;
 
+                    //some green patches underground
+                    if (Noise(px,py,12,16,1)>10)
+                    {
+                        blocks[px, py] = 2;
+                    }
+
+                    //caves
+                    if (Noise(px,py*2,16,14,1)>10)
+                    {
+                        blocks[px, py] = 0;
+                    }
+                }
+
+                else if (py<dirt)
+                {
+                    blocks[px, py] = 2;
+                }
+                else
+                {
+                    blocks[px, py] = 0;
+                }
 
                 // using perlin noise for block info, still working on this
-                column.Add(Noise(px, py, 2, 15, 1));
+                //column.Add(Noise(px, py, 2, 15, 1));
 
 
 
@@ -148,7 +181,7 @@ public class TerrainGenerator : MonoBehaviour
                                 int blocksY = superY * superBlockSize + py;
                                 go.transform.position = new Vector2(blocksX, blocksY);
 
-                                if (blocks[blocksX][blocksY] == 6)
+                                if (blocks[blocksX,blocksY] == 1)
                                 {
 
 
@@ -157,7 +190,7 @@ public class TerrainGenerator : MonoBehaviour
                                     go.AddComponent<BoxCollider2D>();
 
                                 }
-                                if (blocks[blocksX][blocksY] == 7)
+                                if (blocks[blocksX,blocksY] == 2)
                                 {
 
 
@@ -167,15 +200,15 @@ public class TerrainGenerator : MonoBehaviour
 
                                 }
 
-                                if (blocks[blocksX][blocksY] == 8)
-                                {
+                                //if (blocks[blocksX][blocksY] == 8)
+                                //{
 
 
-                                    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite3;
-                                    go.AddComponent<BoxCollider2D>();
+                                //    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                //    renderer.sprite = sprite3;
+                                //    go.AddComponent<BoxCollider2D>();
 
-                                }
+                                //}
                             }
                         }
                     }
@@ -228,7 +261,7 @@ public class TerrainGenerator : MonoBehaviour
                                 int blocksY = superY * superBlockSize + py;
                                 go.transform.position = new Vector2(blocksX, blocksY);
 
-                                if (blocks[blocksX][blocksY] == 6)
+                                if (blocks[blocksX, blocksY] == 1)
                                 {
 
                                     
@@ -237,7 +270,7 @@ public class TerrainGenerator : MonoBehaviour
                                     go.AddComponent<BoxCollider2D>();
 
                                 }
-                                if (blocks[blocksX][blocksY] == 7)
+                                if (blocks[blocksX, blocksY] == 2)
                                 {
 
                                     
@@ -247,15 +280,15 @@ public class TerrainGenerator : MonoBehaviour
 
                                 }
 
-                                if (blocks[blocksX][blocksY] == 8)
-                                {
+                                //if (blocks[blocksX][blocksY] == 8)
+                                //{
 
                                     
-                                    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite3;
-                                    go.AddComponent<BoxCollider2D>();
+                                //    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                //    renderer.sprite = sprite3;
+                                //    go.AddComponent<BoxCollider2D>();
 
-                                }
+                                //}
                             }
                         }
                     }
@@ -372,7 +405,7 @@ public class TerrainGenerator : MonoBehaviour
 
     public void removeBlock(int xPos, int yPos)
     {
-        blocks[xPos][yPos] = 0;
+        blocks[xPos,yPos] = 0;
 
         int superX = Mathf.FloorToInt(xPos / superBlockSize);
         int superY = Mathf.FloorToInt(yPos / superBlockSize);
@@ -389,7 +422,7 @@ public class TerrainGenerator : MonoBehaviour
 
     public void createBlock(int xPos, int yPos, int blockType)
     {
-        blocks[xPos][yPos] = blockType;
+        blocks[xPos,yPos] = blockType;
 
         int superX = Mathf.FloorToInt(xPos / superBlockSize);
         int superY = Mathf.FloorToInt(yPos / superBlockSize);
