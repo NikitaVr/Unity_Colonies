@@ -59,7 +59,7 @@ public class BlockModification : MonoBehaviour {
                 int yPos = Mathf.FloorToInt(hit.transform.position.y);
                 //int xPos = Mathf.RoundToInt(hit.point.x);
                 //int yPos = Mathf.RoundToInt(hit.point.y);
-                int blockType = 6;
+                int blockType = 1;
                 Debug.Log(hit.point);
                 if (hit.point.x - hit.transform.position.x == -0.5)
                 {

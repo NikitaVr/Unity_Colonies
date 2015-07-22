@@ -2,6 +2,9 @@
 using System.Collections;
 // allows for use of lists:
 using System.Collections.Generic;
+using System.IO;
+using ProtoBuf;
+using GameSaveData;
 
 public class TerrainGenerator : MonoBehaviour
 {
@@ -10,6 +13,7 @@ public class TerrainGenerator : MonoBehaviour
     public Sprite sprite;
     public Sprite sprite2;
     public Sprite sprite3;
+    public Sprite mushroom;
     public int[,] blocks;
     //public List<List<List<List<GameObject>>>> superBlocks;
     public GameObject[,,,] superBlocks;
@@ -38,15 +42,63 @@ public class TerrainGenerator : MonoBehaviour
     {
         // Run the functions required for terrain
         GenSuperBlocks();
-        GenTerrain();
+        //GenTerrain();
+        loadTerrain();
         RenderTerrain();
         lastPlayerSuperX = Mathf.FloorToInt(player.transform.position.x / superBlockSize);
         lastPlayerSuperY = Mathf.FloorToInt(player.transform.position.y / superBlockSize);
+        //saveGame();
 
+    }
+
+    //loads the terrain data for the blocks 2D array from a save file created with Protobuf-net
+    void loadTerrain()
+    {
+
+        blocks = new int[xblocks, yblocks];
+
+        using (FileStream f = new FileStream("GameSave", FileMode.OpenOrCreate))
+        {
+            terrain terrainObj = Serializer.Deserialize<terrain>(f);
+            int[] blocksSingle = terrainObj.blocks;
+            for (int px = 0; px < xblocks; px++)
+            {
+                for (int py = 0; py < yblocks; py++)
+                {
+                    blocks[px, py] = blocksSingle[py + px * yblocks];
+                }
+
+            }
+        }
+    }
+
+
+    // serializes and saves the blocks 2D array into a save file using Protobuf-net
+    void saveGame()
+    {
+        using (FileStream f = new FileStream("GameSave", FileMode.OpenOrCreate))
+        {
+            int[] blocksSingle = new int[xblocks*yblocks];
+            for (int px = 0; px < xblocks; px++)
+            {
+                for (int py = 0; py < yblocks; py++)
+                {
+                    blocksSingle[py + px * yblocks] = blocks[px, py];
+                }
+
+            }
+            terrain saveTerrain = new terrain(blocksSingle);
+            ProtoBuf.Serializer.Serialize<terrain>(f, saveTerrain);
+        }
     }
 
 
     // function for creating terrain noise for varying terrain, returns an int
+    // x and y are the coordinates of the block
+    // scale determines how 'large' the perlin noise is, or how far the theoretical points are apart from each other
+    // this determines whether transition from on point to the next is smooth or jagged, larger scale means smoother.
+    // mag = magnitude which determines the intensity of the returned noise at each point
+    // exp still needs to be figured out!
     int Noise(int x, int y, float scale, float mag, float exp)
     {
         return (int)(Mathf.Pow(Mathf.PerlinNoise(x / scale, y / scale) * mag, (exp)));
@@ -54,6 +106,8 @@ public class TerrainGenerator : MonoBehaviour
 
 
     // function for creating the larger super blocks, each on of which will contain a certain number of blocks
+    // splits up the blocks 2D array into many smaller 2D array of size superBlockSize, and set these 2D arrays
+    // into another 2D array
     void GenSuperBlocks()
     {
         //superBlocks = new List<List<List<List<GameObject>>>>(xblocks / superBlockSize);
@@ -82,17 +136,14 @@ public class TerrainGenerator : MonoBehaviour
     void GenTerrain()
     {
 
-        //chunks = new byte[10, 10];
-
-        //blocks = new byte[xblocks, yblocks];
+        // create a new blocks variable that will contain the map data
         blocks = new int[xblocks,yblocks];
 
-
-
-        //GameObject chunk = null;
-
+        // cycle through all the x values of the map
         for (int px = 0; px < xblocks; px++)
         {
+
+            // generate a 1D height map using only the x values for the Noise function, and y being a constant 
             int stone = Noise(px, 0, 80, 15, 1);
             stone += Noise(px,0,50,30,1);
             stone += Noise(px,0,10,10,1);
@@ -101,11 +152,12 @@ public class TerrainGenerator : MonoBehaviour
             int dirt = Noise(px, 0, 100f, 35, 1);
             dirt += Noise(px,100,50,30,1);
             dirt += 150;
-            //column = new List<int>();
-            //blocks.Add(column);
+
+            // for each x value, cycle through the y values
             for (int py = 0; py < yblocks; py++)
             {
 
+                // generate stone and dirt based on the previosuly made heightmap
                 if (py < stone)
                 {
                     blocks[px, py] = 1;
@@ -120,6 +172,14 @@ public class TerrainGenerator : MonoBehaviour
                     if (Noise(px,py*2,16,14,1)>10)
                     {
                         blocks[px, py] = 0;
+                        //Mushrooms
+                        if (py > 1)
+                        {
+                            if (blocks[px, py - 1] == 1 && Noise(px, py * 2, 2, 14, 1) > 7)
+                            {
+                                blocks[px, py] = 4;
+                            }
+                        }
                     }
                 }
 
@@ -127,13 +187,11 @@ public class TerrainGenerator : MonoBehaviour
                 {
                     blocks[px, py] = 2;
                 }
-                else
+                // check if this block is a surface block above both dirt and stone
+                else if ((py == dirt && py>stone) || (py == stone && py > dirt))
                 {
-                    blocks[px, py] = 0;
+                    GenTree(px, py);
                 }
-
-                // using perlin noise for block info, still working on this
-                //column.Add(Noise(px, py, 2, 15, 1));
 
 
 
@@ -141,6 +199,39 @@ public class TerrainGenerator : MonoBehaviour
 
 
             }
+        }
+    }
+
+    // function for generating a tree that requires a value for the x and y coordinates of the block that will be the base of the tree
+    void GenTree(int posX,int posY)
+    {
+        int treeNoise = Noise(posX, posY * 2, 2, 14, 1);
+
+        // if the perlin noise at this point is high enough, create the tree
+        if ( treeNoise > 7)
+        {
+            // create a tree the size of which depends on the perlin noise at the base
+            for (int py = 0; py < (treeNoise-5); py++)
+            {
+                int yCoord = posY + py;
+                if (py > (treeNoise - 8))
+                {
+                    for (int px = -1; px < 2; px++)
+                    {
+                        int xCoord = px + posX;
+                        //add leaves only near the top
+                        if (xCoord > 1 && xCoord < xblocks - 1)
+                        {
+                            blocks[xCoord, yCoord] = 2;
+                        }
+                    }
+                }
+                // creates the body of the tree
+                blocks[posX, yCoord] = 3;
+
+            }
+            // adds a leaf ontop
+            blocks[posX, posY + treeNoise - 5] = 2;
         }
     }
 
@@ -200,16 +291,25 @@ public class TerrainGenerator : MonoBehaviour
 
                                 }
 
-                                //if (blocks[blocksX][blocksY] == 8)
-                                //{
+                            if (blocks[blocksX, blocksY] == 3)
+                            {
 
 
-                                //    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                //    renderer.sprite = sprite3;
-                                //    go.AddComponent<BoxCollider2D>();
+                                SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                renderer.sprite = sprite3;
+                                go.AddComponent<BoxCollider2D>();
 
-                                //}
                             }
+                            if (blocks[blocksX, blocksY] == 4)
+                            {
+
+
+                                SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                renderer.sprite = mushroom;
+                                go.AddComponent<BoxCollider2D>();
+
+                            }
+                        }
                         }
                     }
                 }
@@ -280,15 +380,24 @@ public class TerrainGenerator : MonoBehaviour
 
                                 }
 
-                                //if (blocks[blocksX][blocksY] == 8)
-                                //{
+                                if (blocks[blocksX,blocksY] == 3)
+                                {
 
-                                    
-                                //    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                //    renderer.sprite = sprite3;
-                                //    go.AddComponent<BoxCollider2D>();
 
-                                //}
+                                    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                    renderer.sprite = sprite3;
+                                    go.AddComponent<BoxCollider2D>();
+
+                                }
+                                if (blocks[blocksX, blocksY] == 4)
+                                {
+
+
+                                    SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                    renderer.sprite = mushroom;
+                                    go.AddComponent<BoxCollider2D>();
+
+                                }
                             }
                         }
                     }
@@ -440,6 +549,11 @@ public class TerrainGenerator : MonoBehaviour
         SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
         renderer.sprite = sprite;
         go.AddComponent<BoxCollider2D>();
+    }
+
+    void OnApplicationQuit()
+    {
+        saveGame();
     }
 
 }
