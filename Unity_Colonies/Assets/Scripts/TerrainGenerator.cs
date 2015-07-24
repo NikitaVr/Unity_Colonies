@@ -13,8 +13,29 @@ public class TerrainGenerator : MonoBehaviour
     public Sprite sprite;
     public Sprite sprite2;
     public Sprite sprite3;
+
+    public Sprite cloud;
+
+    public Sprite iceSoft;
+    public Sprite iceHard;
+    public Sprite tundraSoft;
+    public Sprite tundraHard;
+    public Sprite desertSoft;
+    public Sprite desertHard;
+    public Sprite jungleSoft;
+    public Sprite jungleHard;
+
+    public int height;
+    public int heat;
+    public int moisture;
+    public int cloudiness;
+
+
+    public Sprite[,,] spriteCollection;
     public Sprite mushroom;
     public int[,] blocks;
+    public int[,] heatMap;
+    public int[,] moistureMap;
     //public List<List<List<List<GameObject>>>> superBlocks;
     public GameObject[,,,] superBlocks;
     private List<int> column;
@@ -40,8 +61,12 @@ public class TerrainGenerator : MonoBehaviour
     // Function runs when object is first created (start of game)
     void Start()
     {
+        fillSpriteCollection();
+
         // Run the functions required for terrain
         GenSuperBlocks();
+        genHeatMap();
+        genMoistureMap();
         //GenTerrain();
         loadTerrain();
         RenderTerrain();
@@ -50,6 +75,20 @@ public class TerrainGenerator : MonoBehaviour
         //saveGame();
 
     }
+
+    void fillSpriteCollection()
+    {
+        //[heat,moisture,hardness]
+        spriteCollection = new Sprite[2, 2, 3]; 
+        spriteCollection[0, 0, 1] = tundraSoft;
+        spriteCollection[0, 0, 2] = tundraHard;
+        spriteCollection[0, 1, 1] = iceSoft;
+        spriteCollection[0, 1, 2] = iceHard;
+        spriteCollection[1, 0, 1] = desertSoft;
+        spriteCollection[1, 0, 2] = desertHard;
+        spriteCollection[1, 1, 1] = jungleSoft;
+        spriteCollection[1, 1, 2] = jungleHard;
+}
 
     //loads the terrain data for the blocks 2D array from a save file created with Protobuf-net
     void loadTerrain()
@@ -147,11 +186,11 @@ public class TerrainGenerator : MonoBehaviour
             int stone = Noise(px, 0, 80, 15, 1);
             stone += Noise(px,0,50,30,1);
             stone += Noise(px,0,10,10,1);
-            stone += 150;
+            stone += height;
 
             int dirt = Noise(px, 0, 100f, 35, 1);
             dirt += Noise(px,100,50,30,1);
-            dirt += 150;
+            dirt += height;
 
             // for each x value, cycle through the y values
             for (int py = 0; py < yblocks; py++)
@@ -168,7 +207,7 @@ public class TerrainGenerator : MonoBehaviour
                         blocks[px, py] = 2;
                     }
 
-                    //caves
+                    //caves - also use this method, combined with moisture maps, to create  clouds
                     if (Noise(px,py*2,16,14,1)>10)
                     {
                         blocks[px, py] = 0;
@@ -185,7 +224,7 @@ public class TerrainGenerator : MonoBehaviour
 
                 else if (py<dirt)
                 {
-                    blocks[px, py] = 2;
+                    blocks[px, py] = 1;
                 }
                 // check if this block is a surface block above both dirt and stone
                 else if ((py == dirt && py>stone) || (py == stone && py > dirt))
@@ -199,6 +238,55 @@ public class TerrainGenerator : MonoBehaviour
 
 
             }
+        }
+    }
+
+    void genHeatMap()
+    {
+        heatMap = new int[xblocks,yblocks];
+        //int largest = 0;
+        for (int px = 0; px < xblocks; px++)
+        {
+            for (int py = 0; py < yblocks; py++)
+            {
+                int amount = Mathf.CeilToInt(Noise(px, 0, 1000, 10, 1) / (50 / heat));
+                if (amount > 2)
+                {
+                    amount = 2;
+                }
+                heatMap[px, py] = amount;
+                //if (heatMap[px,py] > largest)
+                //{
+                //    largest = heatMap[px, py];
+                //}
+            }
+            //Debug.Log("heatmap " + heatMap[px,0]);
+
+        }
+        
+    }
+
+    void genMoistureMap()
+    {
+        moistureMap = new int[xblocks, yblocks];
+        //int largest = 0;
+        for (int px = 0; px < xblocks; px++)
+        {
+            for (int py = 0; py < yblocks; py++)
+            {
+                int amount = Mathf.CeilToInt(Noise(px + 100, 0, 1000, 10, 1) / (50 / moisture));
+                if (amount > 2)
+                {
+                    amount = 2;
+                }
+                moistureMap[px, py] = amount;
+                //if (heatMap[px,py] > largest)
+                //{
+                //    largest = heatMap[px, py];
+                //}
+            }
+            //Debug.Log("heatmap " + moistureMap[px, 0]);
+
         }
     }
 
@@ -222,7 +310,7 @@ public class TerrainGenerator : MonoBehaviour
                         //add leaves only near the top
                         if (xCoord > 1 && xCoord < xblocks - 1)
                         {
-                            blocks[xCoord, yCoord] = 2;
+                            blocks[xCoord, yCoord] = 1;
                         }
                     }
                 }
@@ -231,7 +319,7 @@ public class TerrainGenerator : MonoBehaviour
 
             }
             // adds a leaf ontop
-            blocks[posX, posY + treeNoise - 5] = 2;
+            blocks[posX, posY + treeNoise - 5] = 1;
         }
     }
 
@@ -272,21 +360,44 @@ public class TerrainGenerator : MonoBehaviour
                                 int blocksY = superY * superBlockSize + py;
                                 go.transform.position = new Vector2(blocksX, blocksY);
 
-                                if (blocks[blocksX,blocksY] == 1)
+                                if (blocks[blocksX, blocksY] == 0)
                                 {
+                                    //add a check to make sure clouds are above ground only
+                                    // same noise as for moisture but smaller scale....
+                                    if (Noise(blocksX + 100, blocksY + 100, 10, 10, 1) > cloudiness)
+                                    {
+                                        SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                        renderer.sprite = cloud;
+                                        //go.AddComponent<BoxCollider2D>();
+                                    }
+                                }
+
+                                if (blocks[blocksX,blocksY] == 1)
+                                    {
 
 
                                     SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite;
-                                    go.AddComponent<BoxCollider2D>();
+                                try {
+                                    renderer.sprite = spriteCollection[heatMap[blocksX, blocksY], moistureMap[blocksX, blocksY], blocks[blocksX, blocksY]];
+                                }
+                                catch
+                                {
+                                    Debug.Log("heat:" + heatMap[blocksX, blocksY]);
+                                    Debug.Log(moistureMap[blocksX, blocksY]);
+                                    Debug.Log("Hardness:" + blocks[blocksX, blocksY]);
+                                }
+                                go.AddComponent<BoxCollider2D>();
 
                                 }
                                 if (blocks[blocksX,blocksY] == 2)
                                 {
 
-
+                                    Debug.Log(heatMap[px, py]);
                                     SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite2;
+                                //Debug.Log("heat:" + heatMap[blocksX, blocksY]);
+                                //Debug.Log(moistureMap[blocksX, blocksY]);
+                                //Debug.Log("Hardness:" + blocks[blocksX, blocksY]);
+                                renderer.sprite = spriteCollection[heatMap[blocksX, blocksY], moistureMap[blocksX, blocksY], blocks[blocksX, blocksY]];
                                     go.AddComponent<BoxCollider2D>();
 
                                 }
@@ -361,21 +472,37 @@ public class TerrainGenerator : MonoBehaviour
                                 int blocksY = superY * superBlockSize + py;
                                 go.transform.position = new Vector2(blocksX, blocksY);
 
+                                if (blocks[blocksX, blocksY] == 0)
+                                {
+                                    //add a check to make sure clouds are above ground only
+                                    // same noise as for moisture but smaller scale....
+                                    if (Noise(blocksX + 100, blocksY+ 100, 10, 10, 1) > cloudiness)
+                                    {
+                                        SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
+                                        renderer.sprite = cloud;
+                                        //go.AddComponent<BoxCollider2D>();
+                                    }
+                                }
+
                                 if (blocks[blocksX, blocksY] == 1)
                                 {
 
                                     
                                     SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite;
+                                    //Debug.Log("heat:" + heatMap[px, py]);
+                                    //Debug.Log("moisture:" + moistureMap[px, py]);
+                                    //Debug.Log("Hardness:" + blocks[px, py]);
+                                    renderer.sprite = spriteCollection[heatMap[blocksX, blocksY], moistureMap[blocksX, blocksY], blocks[blocksX, blocksY]];
                                     go.AddComponent<BoxCollider2D>();
 
                                 }
                                 if (blocks[blocksX, blocksY] == 2)
                                 {
 
-                                    
+                                    // !!!! may cause blocks placed by player turn into region specific blocks, make sure to fix!
                                     SpriteRenderer renderer = go.AddComponent<SpriteRenderer>();
-                                    renderer.sprite = sprite2;
+
+                                    renderer.sprite = spriteCollection[heatMap[blocksX, blocksY], moistureMap[blocksX, blocksY], blocks[blocksX, blocksY]];
                                     go.AddComponent<BoxCollider2D>();
 
                                 }
